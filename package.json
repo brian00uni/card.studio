@@ -10,12 +10,16 @@
     "build": "next build",
     "start": "next start",
     "test": "npm run build",
-    "lint": "eslint . --ignore-pattern .next",
+    "lint": "eslint app --ignore-pattern .next --ignore-pattern dist",
     "validate:sample": "node scripts/validate-data.mjs data/cities/sample-design-only.json",
     "build:sample": "node scripts/build-html.mjs data/cities/sample-design-only.json output/manual_osaka_sample",
     "render": "node scripts/render-png.mjs"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^6.4.12",
+    "@mui/material": "^6.4.12",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
