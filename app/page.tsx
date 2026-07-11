@@ -89,7 +89,11 @@ export default function Home() {
                 <figcaption>공유 채팅에서 확정한 승인 디자인 레퍼런스</figcaption>
               </figure>
             </div>
-            <div className="pager"><button disabled={selected === 0} onClick={() => setSelected(v => v - 1)}>이전</button><div>{cards.map((_,i)=><button key={i} aria-label={`${i+1}번 카드`} className={selected===i?'active':''} onClick={()=>setSelected(i)}/>)}</div><button disabled={selected === 6} onClick={() => setSelected(v => v + 1)}>다음</button></div>
+            <div className="pager">
+              <button className="pager-prev" disabled={selected === 0} onClick={() => setSelected(v => v - 1)}><span>←</span> 이전 카드</button>
+              <div>{cards.map((_,i)=><button key={i} aria-label={`${i+1}번 카드`} className={selected===i?'active':''} onClick={()=>setSelected(i)}/>)}</div>
+              <button className="pager-next" disabled={selected === 6} onClick={() => setSelected(v => v + 1)}>다음 카드 <span>→</span></button>
+            </div>
           </section>
           <aside className="inspection">
             <div className="inspection-head"><h2>검수 메모</h2><span>3개 확인 필요</span></div>
