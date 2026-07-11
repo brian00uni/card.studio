@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Avatar, Box, Button, Card, CardContent, Chip, CssBaseline, Divider, Drawer,
+  Avatar, Box, Button, Card, CardContent, Chip, CssBaseline, Dialog, DialogContent, DialogTitle, Divider, Drawer,
   FormControl, IconButton, InputLabel, LinearProgress, List, ListItemButton,
   MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, ThemeProvider,
   Tooltip, Typography, createTheme,
@@ -22,6 +22,7 @@ import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 
 const drawerWidth = 280;
 
@@ -93,6 +94,7 @@ export default function Home() {
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [saved, setSaved] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [imageOpen, setImageOpen] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("card-studio-prompt");
@@ -152,7 +154,7 @@ export default function Home() {
           {tab === 0 && <Box sx={{ mt: 3, display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(560px,1fr) 360px" }, gap: 3 }}>
             <Card><CardContent sx={{ p: { xs: 2, md: 3 } }}>
               <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>CARD {cards[selected][0]} / 07</Typography><Typography variant="h5">{cards[selected][1]}</Typography></Box><Chip label="승인 디자인 레퍼런스" color="success" variant="outlined" size="small" /></Stack>
-              <Box sx={{ display: "grid", placeItems: "center", py: 3 }}><Box component="figure" sx={{ m: 0, textAlign: "center" }}><Box component="img" src={cards[selected][2]} alt={`승인된 오사카 ${cards[selected][1]} 카드`} sx={{ display: "block", width: 300, maxWidth: "100%", aspectRatio: "941 / 1672", objectFit: "cover", border: "7px solid #07111f", boxShadow: "0 22px 55px rgba(16,24,40,.18)" }} /><Typography component="figcaption" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>공유 채팅에서 확정한 카드 포맷</Typography></Box></Box>
+              <Box sx={{ display: "grid", placeItems: "center", py: 3 }}><Box component="figure" sx={{ m: 0, textAlign: "center" }}><Box component="button" type="button" aria-label={`${cards[selected][1]} 카드 크게 보기`} onClick={() => setImageOpen(true)} sx={{ display: "block", p: 0, border: 0, bgcolor: "transparent", cursor: "zoom-in", borderRadius: 0, transition: "transform .2s ease", "&:hover": { transform: "translateY(-3px)" }, "&:focus-visible": { outline: "3px solid", outlineColor: "primary.main", outlineOffset: 4 } }}><Box component="img" src={cards[selected][2]} alt={`승인된 오사카 ${cards[selected][1]} 카드`} sx={{ display: "block", width: 300, maxWidth: "100%", aspectRatio: "941 / 1672", objectFit: "cover", border: "7px solid #07111f", boxShadow: "0 22px 55px rgba(16,24,40,.18)" }} /></Box><Typography component="figcaption" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>이미지를 클릭하면 크게 볼 수 있습니다</Typography></Box></Box>
               <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, maxWidth: 620, mx: "auto" }}>
                 <Button variant="outlined" startIcon={<ArrowBackRoundedIcon />} disabled={selected === 0} onClick={() => setSelected(v => v - 1)} sx={{ justifySelf: "start" }}>이전 카드</Button>
                 <Stack direction="row" spacing={.8}>{cards.map((_, i) => <Box component="button" aria-label={`${i + 1}번 카드`} key={i} onClick={() => setSelected(i)} sx={{ width: i === selected ? 20 : 8, height: 8, borderRadius: 4, border: 0, p: 0, cursor: "pointer", bgcolor: i === selected ? "primary.main" : "#d0d5dd", transition: ".2s" }} />)}</Stack>
@@ -173,6 +175,22 @@ export default function Home() {
           {tab === 3 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>QUALITY GATE</Typography><Typography variant="h5">발행 전 검수</Typography></Box><Chip label={`${passed} / ${checks.length} 통과`} color="primary" /></Stack><Stack mt={3}>{checks.map(([label, ok]) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}>{ok ? <CheckCircleRoundedIcon color="success" /> : <ErrorRoundedIcon color="warning" />}<Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label={ok ? "통과" : "확인 필요"} size="small" color={ok ? "success" : "warning"} variant="outlined" /></Stack>)}</Stack><Paper variant="outlined" sx={{ mt: 3, p: 2, borderColor: approved ? "success.main" : "warning.main", bgcolor: approved ? "#ecfdf5" : "#fffbeb" }}><Typography fontWeight={800}>{approved ? "PNG 생성이 승인되었습니다" : "모든 필수 QA 통과 후 승인하세요"}</Typography><Typography variant="body2" color="text.secondary" mt={.5}>{approved ? "실제 렌더러 연결 후 1080×1920 PNG 7장이 생성됩니다." : "현재 샘플 데이터이므로 실제 발행 파일은 생성하지 않습니다."}</Typography></Paper></CardContent></Card>}
         </Box>
       </Box>
+
+      <Dialog open={imageOpen} onClose={() => setImageOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { bgcolor: "#0b1220", color: "white", maxHeight: "94vh" } }} slotProps={{ backdrop: { sx: { bgcolor: "rgba(3,7,18,.88)", backdropFilter: "blur(4px)" } } }}>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", py: 1.5 }}>
+          <Box><Typography variant="overline" sx={{ color: "#a5b4fc", fontWeight: 850 }}>CARD {cards[selected][0]} / 07</Typography><Typography variant="h6" color="white">오사카 · {cards[selected][1]}</Typography></Box>
+          <IconButton aria-label="닫기" onClick={() => setImageOpen(false)} sx={{ color: "white" }}><CloseRoundedIcon /></IconButton>
+        </DialogTitle>
+        <Divider sx={{ borderColor: "#ffffff18" }} />
+        <DialogContent sx={{ p: { xs: 2, md: 3 }, display: "grid", placeItems: "center" }}>
+          <Box component="img" src={cards[selected][2]} alt={`확대된 오사카 ${cards[selected][1]} 카드`} sx={{ display: "block", maxWidth: "100%", width: "auto", maxHeight: "72vh", objectFit: "contain", boxShadow: "0 24px 70px rgba(0,0,0,.38)" }} />
+          <Box sx={{ width: "100%", mt: 2, display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2 }}>
+            <Button color="inherit" startIcon={<ArrowBackRoundedIcon />} disabled={selected === 0} onClick={() => setSelected(v => v - 1)} sx={{ justifySelf: "start" }}>이전</Button>
+            <Typography variant="caption" sx={{ color: "#9ca3af" }}>{selected + 1} / {cards.length}</Typography>
+            <Button color="inherit" endIcon={<ArrowForwardRoundedIcon />} disabled={selected === cards.length - 1} onClick={() => setSelected(v => v + 1)} sx={{ justifySelf: "end" }}>다음</Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
     </ThemeProvider>
   );
 }
