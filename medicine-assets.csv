@@ -1,0 +1,5 @@
+country,category,product_name_local,product_name_ko,image_file,status,source_note
+japan,fever,タイレノールA,타이레놀A,assets/medicine/japan/tylenol-a.png,needs_asset,공식 또는 직접 촬영 정면 이미지 필요
+japan,diarrhea,ストッパ下痢止めEX,스톳파EX,assets/medicine/japan/stoppa-ex.png,needs_asset,공식 또는 직접 촬영 정면 이미지 필요
+japan,allergy,レスタミンUコーワ錠,레스타민U,assets/medicine/japan/restamin-u.png,needs_asset,공식 또는 직접 촬영 정면 이미지 필요
+japan,wound,マキロンs,마키론s,assets/medicine/japan/makiron-s.png,needs_asset,공식 또는 직접 촬영 정면 이미지 필요
