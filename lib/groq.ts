@@ -42,6 +42,14 @@ function extractJson(content: string): GroqDraft {
     Array.isArray(draft.sources) &&
     Array.isArray(draft.medicineCandidates);
   if (!valid) throw new Error("Groq returned an invalid card-data structure.");
+  const traceableSources = draft.sources.filter((source) => {
+    const url = typeof source.url === "string" ? source.url : "";
+    const supports = typeof source.supports === "string" ? source.supports : "";
+    return /^https:\/\//.test(url) && supports.trim().length > 0;
+  });
+  if (traceableSources.length < 3) {
+    throw new Error("Research draft rejected: fewer than 3 traceable official sources.");
+  }
   return draft;
 }
 
@@ -84,9 +92,14 @@ export async function generateResearchDraft(project: { country: string; city: st
   });
   const searchRaw = await searchResponse.text();
   if (!searchResponse.ok) throw new Error(`Groq search ${searchResponse.status}: ${searchRaw.slice(0, 800)}`);
-  const searchPayload = JSON.parse(searchRaw) as { choices?: Array<{ message?: { content?: string } }> };
-  const researchText = searchPayload.choices?.[0]?.message?.content;
+  const searchPayload = JSON.parse(searchRaw) as {
+    choices?: Array<{ message?: { content?: string; executed_tools?: unknown } }>;
+  };
+  const searchMessage = searchPayload.choices?.[0]?.message;
+  const researchText = searchMessage?.content;
   if (!researchText) throw new Error("Groq search returned no research content.");
+  const toolEvidence = JSON.stringify(searchMessage.executed_tools || []).slice(0, 16000);
+  const checkedAt = new Date().toISOString().slice(0, 10);
 
   const user = `아래는 ${project.country} ${project.city}에서 “${project.topic}” 상황에 쓰는 카드의 웹 조사 결과다.
 조사 결과에 명시된 사실과 URL만 사용해 7장 카드 초안 JSON을 만든다. 출처가 불충분한 값은 빈 문자열로 두고 blockers에 기록한다.
@@ -94,6 +107,10 @@ export async function generateResearchDraft(project: { country: string; city: st
 <research>
 ${researchText}
 </research>
+
+<tool-evidence>
+${toolEvidence}
+</tool-evidence>
 
 JSON 최상위 키는 cardData, research, sources, qaReport, caption, textVersion, medicineCandidates로 한다.
 cardData는 아래 필드 구조를 정확히 사용한다.
@@ -106,6 +123,7 @@ phrases{title,subtitle,groups:[{target,lines:[{local,ko}]}] 정확히 3개,foote
 medicines{title,subtitle,items:[{category,localName,koName,age,image}] 정확히 4개,warning,footer},
 summary{title,rows:[{label,value}],saveLine}.
 각 sources 항목은 category, title, url, publisher, checkedAt, grade, supports를 포함한다.
+checkedAt은 ${checkedAt}로 기록한다. tool-evidence에 실제 URL이 없는 출처는 sources에 넣지 않는다.
 qaReport는 passed(문자열 배열), blockers(문자열 배열), warnings(문자열 배열), humanReviewRequired(문자열 배열)를 포함한다.
 medicineCandidates 각 항목은 category, localProductName, koreanProductName, sourceUrl, sourceType, usageNote를 포함한다.
 medicines.items의 image는 모두 빈 문자열로 두며 실제 사진 승인 전에는 blockers에서 제거하지 않는다.`;

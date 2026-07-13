@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     const queue = await supabaseRequest<CardProject[]>(
-      "card_projects?select=*&status=in.(queued,failed)&order=order_index.asc&limit=1",
+      "card_projects?select=*&status=in.(queued,failed,needs_asset)&order=order_index.asc&limit=1",
     );
     project = queue[0];
     if (!project) return NextResponse.json({ skipped: true, reason: "No queued project" });
@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
 
     const draft = await generateResearchDraft(project);
     const version = project.current_version + 1;
+    if (project.current_version > 0) {
+      await supabaseRequest(`card_versions?project_id=eq.${project.id}&status=neq.approved`, {
+        method: "PATCH",
+        prefer: "return=minimal",
+        body: JSON.stringify({ status: "superseded" }),
+      });
+    }
     const versions = await supabaseRequest<Array<{ id: string }>>("card_versions", {
       method: "POST",
       prefer: "return=representation",

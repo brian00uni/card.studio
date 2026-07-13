@@ -26,7 +26,11 @@ export async function GET(
         `card_reviews?select=*&project_id=eq.${project.id}&order=created_at.desc&limit=50`,
       ),
     ]);
-    return NextResponse.json({ project, version: versions[0] || null, assets, reviews });
+    const version = versions[0] || null;
+    const currentAssets = version
+      ? assets.filter((asset) => asset.version_id === version.id)
+      : [];
+    return NextResponse.json({ project, version, assets: currentAssets, reviews });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown backend error";
     return NextResponse.json({ error: message }, { status: 502 });
