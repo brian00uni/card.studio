@@ -14,7 +14,6 @@ import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
-import ShareRoundedIcon from "@mui/icons-material/ShareRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -125,11 +124,17 @@ export default function Home() {
   const [tab, setTab] = useState(0);
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [saved, setSaved] = useState(false);
-  const [, setApproved] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [backendNotice, setBackendNotice] = useState<string | null>(null);
   const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [reviewPrompt, setReviewPrompt] = useState("실제 조사 데이터로 교체한 뒤 전화번호와 이미지 출처를 다시 확인해주세요.");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("card-studio-prompt");
@@ -141,6 +146,10 @@ export default function Home() {
         setProjects(payload.projects || []);
       })
       .catch(() => setBackendNotice("Supabase 마이그레이션 적용 전에는 디자인 샘플만 표시됩니다."));
+    fetch("/api/auth/session")
+      .then((response) => response.json())
+      .then((payload) => setAuthenticated(Boolean(payload.authenticated)))
+      .catch(() => setAuthenticated(false));
   }, []);
 
   const passed = useMemo(() => checks.filter(([, ok]) => ok).length, []);
@@ -165,6 +174,57 @@ export default function Home() {
     window.localStorage.setItem("card-studio-prompt", prompt);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1600);
+  };
+  const login = async () => {
+    setLoginError(null);
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: adminPassword }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setLoginError(payload.error || "로그인하지 못했습니다.");
+      return;
+    }
+    setAuthenticated(true);
+    setAdminPassword("");
+    setLoginOpen(false);
+  };
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthenticated(false);
+  };
+  const submitRevision = async () => {
+    if (!activeProject) return;
+    if (!authenticated) {
+      setLoginOpen(true);
+      return;
+    }
+    setReviewSaving(true);
+    setReviewMessage(null);
+    try {
+      const response = await fetch(`/api/projects/${activeProject.slug}/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: reviewPrompt, cardNumber: selected + 1 }),
+      });
+      const payload = await response.json();
+      if (response.status === 401) {
+        setAuthenticated(false);
+        setLoginOpen(true);
+        throw new Error("관리자 로그인이 필요합니다.");
+      }
+      if (!response.ok) throw new Error(payload.error || "수정 요청에 실패했습니다.");
+      setReviewMessage(`version ${payload.version}이 생성되었습니다. 다시 검수해주세요.`);
+      const detailResponse = await fetch(`/api/projects/${activeProject.slug}`);
+      setProjectDetail(await detailResponse.json());
+      setProjects((items) => items.map((item) => item.slug === activeProject.slug ? { ...item, current_version: payload.version, status: "needs_review" } : item));
+    } catch (error) {
+      setReviewMessage(error instanceof Error ? error.message : "수정 요청에 실패했습니다.");
+    } finally {
+      setReviewSaving(false);
+    }
   };
 
   return (
@@ -197,7 +257,7 @@ export default function Home() {
       <Box component="main" sx={{ ml: { xs: 0, lg: `${drawerWidth}px` }, minHeight: "100vh", bgcolor: "background.default" }}>
         <Box component="header" sx={{ height: 72, px: { xs: 2, md: 4 }, bgcolor: "white", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}><IconButton size="small"><SearchRoundedIcon /></IconButton><Typography variant="body2" color="text.secondary">프로젝트 검색</Typography></Stack>
-          <Stack direction="row" spacing={1}><Button variant="outlined" color="inherit" startIcon={<ShareRoundedIcon />}>공유 링크</Button><Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => setApproved(true)}>PNG 생성 승인</Button><Tooltip title="더보기"><IconButton><MoreVertRoundedIcon /></IconButton></Tooltip></Stack>
+          <Stack direction="row" spacing={1}><Button variant="outlined" color="inherit" onClick={authenticated ? logout : () => setLoginOpen(true)}>{authenticated ? "로그아웃" : "관리자 로그인"}</Button><Tooltip title="필수 QA와 실제 약품 사진 승인 후 사용할 수 있습니다"><span><Button variant="contained" startIcon={<DownloadRoundedIcon />} disabled>PNG 생성 승인</Button></span></Tooltip><Tooltip title="더보기"><IconButton><MoreVertRoundedIcon /></IconButton></Tooltip></Stack>
         </Box>
 
         <Box sx={{ px: { xs: 2, md: 4 }, py: 3 }}>
@@ -222,7 +282,7 @@ export default function Home() {
             </CardContent></Card>
 
             <Stack spacing={3}>
-              <Card><CardContent><Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}><Typography variant="h6">검수 메모</Typography><Chip label="3개 확인 필요" size="small" color="warning" /></Stack><Divider sx={{ my: 2 }} /><FormControl fullWidth size="small"><InputLabel>카드 상태</InputLabel><Select label="카드 상태" defaultValue="edit"><MenuItem value="edit">수정 필요</MenuItem><MenuItem value="approved">승인</MenuItem></Select></FormControl><TextField multiline minRows={4} fullWidth label="수정 요청" defaultValue="실제 조사 데이터로 교체한 뒤 전화번호와 이미지 출처를 다시 확인해주세요." sx={{ mt: 2 }} /><Button fullWidth variant="contained" sx={{ mt: 2 }}>수정 요청 저장</Button></CardContent></Card>
+              <Card><CardContent><Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}><Typography variant="h6">검수 메모</Typography><Chip label={`${liveQa?.blockers?.length || 0}개 확인 필요`} size="small" color="warning" /></Stack><Divider sx={{ my: 2 }} /><FormControl fullWidth size="small"><InputLabel>대상 카드</InputLabel><Select label="대상 카드" value={selected + 1} onChange={(event) => setSelected(Number(event.target.value) - 1)}>{cards.map((card, index) => <MenuItem key={card[0]} value={index + 1}>{index + 1}. {card[1]}</MenuItem>)}</Select></FormControl><TextField multiline minRows={4} fullWidth label="프롬프트로 수정 요청" value={reviewPrompt} onChange={(event) => setReviewPrompt(event.target.value)} sx={{ mt: 2 }} />{reviewMessage && <Typography variant="body2" color={reviewMessage.includes("생성") ? "success.main" : "error.main"} mt={1}>{reviewMessage}</Typography>}<Button fullWidth variant="contained" sx={{ mt: 2 }} onClick={submitRevision} disabled={reviewSaving || !reviewPrompt.trim()}>{reviewSaving ? "새 버전 생성 중…" : authenticated ? "수정 요청하고 새 버전 생성" : "로그인 후 수정 요청"}</Button></CardContent></Card>
               <Card><CardContent><Stack direction="row" sx={{ justifyContent: "space-between" }}><Typography variant="h6">진행률</Typography><Typography color="primary.main" fontWeight={850}>{passed} / {checks.length}</Typography></Stack><LinearProgress variant="determinate" value={(passed / checks.length) * 100} sx={{ my: 2, height: 7, borderRadius: 4 }} /><Stack spacing={1.2}>{checks.slice(0, 4).map(([label, ok]) => <Stack direction="row" spacing={1} key={label} sx={{ alignItems: "center" }}>{ok ? <CheckCircleRoundedIcon color="success" fontSize="small" /> : <ErrorRoundedIcon color="warning" fontSize="small" />}<Typography variant="body2">{label}</Typography></Stack>)}</Stack></CardContent></Card>
             </Stack>
           </Box>}
@@ -234,6 +294,15 @@ export default function Home() {
           {tab === 3 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>QUALITY GATE</Typography><Typography variant="h5">발행 전 검수</Typography></Box><Chip label={`${liveQa?.passed?.length || 0}개 통과`} color="primary" /></Stack><Stack mt={3}>{(liveQa?.blockers || ["실제 조사 데이터 생성 대기"]).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><ErrorRoundedIcon color="warning" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="해결 필요" size="small" color="warning" variant="outlined" /></Stack>)}{(liveQa?.passed || []).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><CheckCircleRoundedIcon color="success" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="통과" size="small" color="success" variant="outlined" /></Stack>)}</Stack><Paper variant="outlined" sx={{ mt: 3, p: 2, borderColor: "warning.main", bgcolor: "#fffbeb" }}><Typography fontWeight={800}>모든 필수 QA 통과 후 승인할 수 있습니다</Typography><Typography variant="body2" color="text.secondary" mt={.5}>현재 version은 검수 초안입니다. PNG 생성과 다운로드는 아직 차단되어 있습니다.</Typography></Paper></CardContent></Card>}
         </Box>
       </Box>
+
+      <Dialog open={loginOpen} onClose={() => setLoginOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>관리자 로그인</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" mb={2}>Vercel에 등록한 관리자 비밀번호를 입력하세요. 비밀번호는 서버에서만 확인됩니다.</Typography>
+          <TextField autoFocus fullWidth type="password" label="관리자 비밀번호" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void login(); }} error={Boolean(loginError)} helperText={loginError} />
+          <Button fullWidth variant="contained" sx={{ mt: 2 }} onClick={login} disabled={!adminPassword}>로그인</Button>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={imageOpen} onClose={() => setImageOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { bgcolor: "#0b1220", color: "white", maxHeight: "94vh" } }} slotProps={{ backdrop: { sx: { bgcolor: "rgba(3,7,18,.88)", backdropFilter: "blur(4px)" } } }}>
         <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", py: 1.5 }}>

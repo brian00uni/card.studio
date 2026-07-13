@@ -158,3 +158,50 @@ medicines.items의 image는 모두 빈 문자열로 두며 실제 사진 승인 
   if (!content) throw new Error("Groq returned no draft content.");
   return extractJson(content);
 }
+
+export async function reviseResearchDraft(draft: GroqDraft, prompt: string, cardNumber?: number) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
+  const scope = cardNumber ? `${cardNumber}번 카드만` : "요청과 직접 관련된 카드만";
+  const response = await fetch(GROQ_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.1,
+      max_completion_tokens: 3200,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `여행 위급정보 카드의 검수 수정자다. ${scope} 수정한다.
+기존 sources와 research의 사실·URL은 삭제하거나 새로 만들지 않는다.
+출처가 없는 전화번호, 병원 정보, 운영시간, 지원 언어, 약품 정보는 새로 확정하지 않는다.
+qaReport.blockers는 근거 없이 제거하지 않고 사용자 수정 후 재검수 필요 항목을 추가한다.
+medicines.items.image는 승인된 실제 이미지 경로가 아니면 빈 문자열을 유지한다.
+meta.account는 @gaseongbi_crew로 유지한다. 전체 GroqDraft JSON만 반환한다.`,
+        },
+        {
+          role: "user",
+          content: `수정 요청:\n${prompt.slice(0, 3000)}\n\n현재 초안:\n${JSON.stringify(draft).slice(0, 24000)}`,
+        },
+      ],
+    }),
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`Groq revision ${response.status}: ${raw.slice(0, 800)}`);
+  const payload = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
+  const content = payload.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Groq returned no revision content.");
+  const revised = extractJson(content);
+  revised.sources = draft.sources;
+  revised.research = draft.research;
+  revised.qaReport = {
+    ...revised.qaReport,
+    blockers: Array.from(new Set([
+      ...((revised.qaReport.blockers as string[] | undefined) || []),
+      "사용자 프롬프트 수정 후 사실·현지어·레이아웃 재검수 필요",
+    ])),
+  };
+  return revised;
+}
