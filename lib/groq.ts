@@ -55,13 +55,7 @@ medicines.items의 image는 모두 빈 문자열로 두며 실제 사진 승인 
     }),
   });
 
-  let response = await request();
-  if (response.status === 429) {
-    const retryAfter = Number(response.headers.get("retry-after") || "8");
-    await response.text();
-    await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter, 2), 15) * 1000));
-    response = await request();
-  }
+  const response = await request();
   const raw = await response.text();
   if (!response.ok) throw new Error(`Groq ${response.status}: ${raw.slice(0, 800)}`);
   const payload = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
