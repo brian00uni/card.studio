@@ -98,7 +98,7 @@ export async function generateResearchDraft(project: { country: string; city: st
   const searchMessage = searchPayload.choices?.[0]?.message;
   const researchText = searchMessage?.content;
   if (!researchText) throw new Error("Groq search returned no research content.");
-  const toolEvidence = JSON.stringify(searchMessage.executed_tools || []).slice(0, 16000);
+  const toolEvidence = JSON.stringify(searchMessage.executed_tools || []).slice(0, 10000);
   const checkedAt = new Date().toISOString().slice(0, 10);
 
   const user = `아래는 ${project.country} ${project.city}에서 “${project.topic}” 상황에 쓰는 카드의 웹 조사 결과다.
@@ -134,7 +134,7 @@ medicines.items의 image는 모두 빈 문자열로 두며 실제 사진 승인 
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       temperature: 0.1,
-      max_completion_tokens: 3800,
+      max_completion_tokens: 3200,
       response_format: { type: "json_object" },
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
     }),
