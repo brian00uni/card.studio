@@ -70,7 +70,11 @@ export async function generateResearchDraft(project: { country: string; city: st
 
   const searchResponse = await fetch(GROQ_ENDPOINT, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "Groq-Model-Version": "2025-07-23",
+    },
     body: JSON.stringify({
       model: "groq/compound-mini",
       temperature: 0,
