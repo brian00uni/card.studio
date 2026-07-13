@@ -1,7 +1,8 @@
 {
   "name": "gaseongbi-card-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -9,8 +10,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run build",
-    "lint": "eslint app --ignore-pattern .next --ignore-pattern dist",
+    "test": "npm run validate:sample && npm run build",
+    "lint": "eslint app lib --ignore-pattern .next --ignore-pattern dist",
     "validate:sample": "node scripts/validate-data.mjs data/cities/sample-design-only.json",
     "build:sample": "node scripts/build-html.mjs data/cities/sample-design-only.json output/manual_osaka_sample",
     "render": "node scripts/render-png.mjs"
@@ -34,6 +35,5 @@
     "playwright": "1.53.0",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
-  },
-  "type": "module"
+  }
 }

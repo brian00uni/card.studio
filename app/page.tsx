@@ -62,11 +62,34 @@ const cards = [
   ["07", "요약", "/reference/07-summary-approved-style.png"],
 ] as const;
 
-const queue = [
+const fallbackQueue = [
   ["오사카", "일본", "검수 준비", "오늘 06:42"],
   ["다낭", "베트남", "대기", "내일 06:00"],
   ["나트랑", "베트남", "대기", "순서 3"],
 ] as const;
+
+type Project = {
+  id: string;
+  order_index: number;
+  country: string;
+  city: string;
+  slug: string;
+  status: string;
+  run_date: string | null;
+  current_version: number;
+};
+
+const statusLabel: Record<string, string> = {
+  queued: "대기",
+  researching: "조사 중",
+  needs_review: "검수 필요",
+  needs_asset: "약품 사진 승인 필요",
+  revision_requested: "수정 요청",
+  approved: "승인",
+  rendering: "PNG 생성 중",
+  completed: "완료",
+  failed: "오류",
+};
 
 const checks = [
   ["HTML 카드 7장", true], ["@gaseongbi_crew 표기", true],
@@ -95,13 +118,26 @@ export default function Home() {
   const [saved, setSaved] = useState(false);
   const [approved, setApproved] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [backendNotice, setBackendNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("card-studio-prompt");
     if (stored) queueMicrotask(() => setPrompt(stored));
+    fetch("/api/projects")
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "프로젝트 목록을 불러오지 못했습니다.");
+        setProjects(payload.projects || []);
+      })
+      .catch(() => setBackendNotice("Supabase 마이그레이션 적용 전에는 디자인 샘플만 표시됩니다."));
   }, []);
 
   const passed = useMemo(() => checks.filter(([, ok]) => ok).length, []);
+  const activeProject = projects[0];
+  const projectQueue = projects.length
+    ? projects.slice(0, 5).map((project) => [project.city, project.country, statusLabel[project.status] || project.status] as const)
+    : fallbackQueue;
   const savePrompt = () => {
     window.localStorage.setItem("card-studio-prompt", prompt);
     setSaved(true);
@@ -126,7 +162,7 @@ export default function Home() {
           </Box>
           <Box sx={{ px: 3, mt: 1 }}>
             <Typography variant="overline" sx={{ color: "#6b7280", fontWeight: 800, letterSpacing: ".13em" }}>PRODUCTION QUEUE</Typography>
-            <Stack spacing={1} mt={1.5}>{queue.map(([city, country, status], i) => <Paper key={city} elevation={0} sx={{ p: 1.5, bgcolor: i === 0 ? "#ffffff0d" : "transparent", border: "1px solid", borderColor: i === 0 ? "#ffffff18" : "transparent", color: "white" }}><Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}><Box><Typography variant="body2" fontWeight={800}>{city}</Typography><Typography variant="caption" color="#7f8a9d">{country}</Typography></Box><Chip label={status} size="small" sx={{ height: 22, bgcolor: i === 0 ? "#4f46e533" : "#ffffff0a", color: i === 0 ? "#a5b4fc" : "#7f8a9d", fontSize: 10 }} /></Stack></Paper>)}</Stack>
+            <Stack spacing={1} mt={1.5}>{projectQueue.map(([city, country, status], i) => <Paper key={city} elevation={0} sx={{ p: 1.5, bgcolor: i === 0 ? "#ffffff0d" : "transparent", border: "1px solid", borderColor: i === 0 ? "#ffffff18" : "transparent", color: "white" }}><Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}><Box><Typography variant="body2" fontWeight={800}>{city}</Typography><Typography variant="caption" color="#7f8a9d">{country}</Typography></Box><Chip label={status} size="small" sx={{ height: 22, bgcolor: i === 0 ? "#4f46e533" : "#ffffff0a", color: i === 0 ? "#a5b4fc" : "#7f8a9d", fontSize: 10 }} /></Stack></Paper>)}</Stack>
           </Box>
           <Box sx={{ mt: "auto", p: 2.5 }}>
             <Card sx={{ bgcolor: "#ffffff0b", borderColor: "#ffffff14", color: "white" }}><CardContent sx={{ p: "16px !important" }}><Stack direction="row" spacing={1.3}><ScheduleRoundedIcon sx={{ color: "#34d399", fontSize: 20 }} /><Box><Typography variant="caption" color="#8b95a7">다음 자동 생성</Typography><Typography variant="body2" fontWeight={800}>내일 오전 6:00</Typography><Typography variant="caption" color="#8b95a7">오전 7시 전 검수 대기</Typography></Box></Stack></CardContent></Card>
@@ -143,8 +179,8 @@ export default function Home() {
 
         <Box sx={{ px: { xs: 2, md: 4 }, py: 3 }}>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
-            <Box><Typography variant="body2" color="text.secondary" mb={.5}>카드 프로젝트  /  일본</Typography><Typography variant="h4">오사카 위급정보 카드</Typography></Box>
-            <Stack direction="row" spacing={1}><Chip icon={<ScheduleRoundedIcon />} label="오늘 06:42 생성" variant="outlined" /><Chip label="검수 준비 전" color="warning" variant="outlined" /></Stack>
+            <Box><Typography variant="body2" color="text.secondary" mb={.5}>카드 프로젝트  /  {activeProject?.country || "일본"}</Typography><Typography variant="h4">{activeProject?.city || "오사카"} 위급정보 카드</Typography>{backendNotice && <Typography variant="caption" color="warning.main">{backendNotice}</Typography>}</Box>
+            <Stack direction="row" spacing={1}><Chip icon={<ScheduleRoundedIcon />} label={activeProject?.run_date ? new Date(activeProject.run_date).toLocaleString("ko-KR") : "자동 생성 대기"} variant="outlined" /><Chip label={activeProject ? (statusLabel[activeProject.status] || activeProject.status) : "디자인 샘플"} color="warning" variant="outlined" /></Stack>
           </Stack>
 
           <Card sx={{ mt: 3 }}>
