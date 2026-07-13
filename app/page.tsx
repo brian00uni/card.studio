@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Avatar, Box, Button, Card, CardContent, Chip, CssBaseline, Dialog, DialogContent, DialogTitle, Divider, Drawer,
-  FormControl, IconButton, InputLabel, LinearProgress, List, ListItemButton,
+  Avatar, Box, Button, Card, CardContent, Checkbox, Chip, CssBaseline, Dialog, DialogContent, DialogTitle, Divider, Drawer,
+  FormControl, FormControlLabel, IconButton, InputLabel, LinearProgress, List, ListItemButton,
   MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, ThemeProvider,
   Tooltip, Typography, createTheme,
 } from "@mui/material";
@@ -84,7 +84,7 @@ type ProjectDetail = {
     sources: Array<{ title?: string; url?: string; publisher?: string; grade?: string; supports?: string }>;
     qa_report: { passed?: string[]; blockers?: string[]; warnings?: string[]; humanReviewRequired?: string[] };
   };
-  assets: Array<{ id: string; category: string; local_product_name?: string; source_url: string; approval_status: string }>;
+  assets: Array<{ id: string; category: string; local_product_name?: string; source_url: string; approval_status: string; storage_path?: string | null }>;
 };
 
 const statusLabel: Record<string, string> = {
@@ -135,6 +135,12 @@ export default function Home() {
   const [reviewPrompt, setReviewPrompt] = useState("실제 조사 데이터로 교체한 뒤 전화번호와 이미지 출처를 다시 확인해주세요.");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [assetForm, setAssetForm] = useState({ category: "", localProductName: "", koreanProductName: "", productPageUrl: "", imageUrl: "", usageNote: "" });
+  const [assetSaving, setAssetSaving] = useState(false);
+  const [assetMessage, setAssetMessage] = useState<string | null>(null);
+  const [approveAssetId, setApproveAssetId] = useState<string | null>(null);
+  const [confirmProductMatch, setConfirmProductMatch] = useState(false);
+  const [confirmUsageRights, setConfirmUsageRights] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("card-studio-prompt");
@@ -226,6 +232,56 @@ export default function Home() {
       setReviewSaving(false);
     }
   };
+  const refreshProjectDetail = async () => {
+    if (!activeProject) return;
+    const response = await fetch(`/api/projects/${activeProject.slug}`);
+    if (response.ok) setProjectDetail(await response.json());
+  };
+  const addAssetCandidate = async () => {
+    if (!activeProject) return;
+    if (!authenticated) { setLoginOpen(true); return; }
+    setAssetSaving(true);
+    setAssetMessage(null);
+    try {
+      const response = await fetch(`/api/projects/${activeProject.slug}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(assetForm),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "약품 후보 등록에 실패했습니다.");
+      setAssetForm({ category: "", localProductName: "", koreanProductName: "", productPageUrl: "", imageUrl: "", usageNote: "" });
+      setAssetMessage("후보가 등록되었습니다. 원문과 실제 패키지를 확인한 뒤 승인하세요.");
+      await refreshProjectDetail();
+    } catch (error) {
+      setAssetMessage(error instanceof Error ? error.message : "약품 후보 등록에 실패했습니다.");
+    } finally {
+      setAssetSaving(false);
+    }
+  };
+  const approveAndDownloadAsset = async () => {
+    if (!approveAssetId) return;
+    setAssetSaving(true);
+    setAssetMessage(null);
+    try {
+      const response = await fetch(`/api/assets/${approveAssetId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmProductMatch, confirmUsageRights }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "이미지 승인·다운로드에 실패했습니다.");
+      setApproveAssetId(null);
+      setConfirmProductMatch(false);
+      setConfirmUsageRights(false);
+      setAssetMessage("실제 패키지 이미지가 승인되어 비공개 Storage에 저장됐습니다.");
+      await refreshProjectDetail();
+    } catch (error) {
+      setAssetMessage(error instanceof Error ? error.message : "이미지 승인·다운로드에 실패했습니다.");
+    } finally {
+      setAssetSaving(false);
+    }
+  };
 
   return (
     <ThemeProvider theme={theme}>
@@ -289,7 +345,23 @@ export default function Home() {
 
           {tab === 1 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction={{ xs: "column", sm: "row" }} gap={2} sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>AUTOMATION PROMPT</Typography><Typography variant="h5">매일 아침 제작 지시문</Typography><Typography variant="body2" color="text.secondary" mt={1}>현재 브라우저에 임시 저장되며 Supabase 연결 후 팀 공용 버전으로 전환됩니다.</Typography></Box><Button variant="contained" onClick={savePrompt}>{saved ? "저장됨" : "프롬프트 저장"}</Button></Stack><TextField value={prompt} onChange={e => setPrompt(e.target.value)} multiline minRows={15} fullWidth sx={{ mt: 3, "& textarea": { fontFamily: "ui-monospace, monospace", lineHeight: 1.7 } }} /><Stack direction="row" mt={1} sx={{ justifyContent: "space-between" }}><Typography variant="caption" color="text.secondary">매일 오전 6시 실행 · 오전 7시 검수 준비</Typography><Typography variant="caption" color="text.secondary">{prompt.length}자</Typography></Stack></CardContent></Card>}
 
-          {tab === 2 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>SOURCE REGISTRY</Typography><Typography variant="h5">정보·이미지 출처</Typography></Box><Chip label={`${liveSources.length}개 후보`} variant="outlined" /></Stack><Box sx={{ mt: 3, overflowX: "auto" }}>{liveSources.length ? liveSources.map((source, i) => <Stack key={`${source.url}-${i}`} direction={{ xs: "column", sm: "row" }} gap={1} sx={{ py: 2, borderBottom: "1px solid", borderColor: "divider", alignItems: { sm: "center" } }}><Box sx={{ flex: 1 }}><Typography variant="body2" fontWeight={750}>{source.title || "제목 미확인"}</Typography><Typography variant="caption" color="text.secondary">{source.publisher || "발행기관 미확인"}</Typography></Box><Button component="a" href={source.url || undefined} target="_blank" rel="noreferrer" disabled={!source.url} size="small" startIcon={<LinkRoundedIcon />}>원문 확인</Button><Chip label={source.supports ? "근거 연결" : "근거 확인 필요"} size="small" color={source.supports ? "success" : "warning"} variant="outlined" /></Stack>) : <Typography color="text.secondary">저장된 출처 후보가 없습니다.</Typography>}</Box>{projectDetail?.assets?.length ? <Box mt={3}><Typography variant="h6">약품 이미지 후보</Typography>{projectDetail.assets.map((asset) => <Stack key={asset.id} direction="row" sx={{ py: 1.5, borderBottom: "1px solid", borderColor: "divider" }}><Typography sx={{ flex: 1 }}>{asset.category} · {asset.local_product_name}</Typography><Chip label={asset.approval_status} size="small" /></Stack>)}</Box> : <Paper variant="outlined" sx={{ mt: 3, p: 2, bgcolor: "#fffbeb" }}><Typography fontWeight={800}>승인 가능한 실제 약품 사진 후보 없음</Typography><Typography variant="body2" color="text.secondary">제조사 공식 URL과 실제 패키지 사진 확인 후에만 다운로드할 수 있습니다.</Typography></Paper>}</CardContent></Card>}
+          {tab === 2 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}>
+            <Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>SOURCE REGISTRY</Typography><Typography variant="h5">정보·이미지 출처</Typography></Box><Chip label={`${liveSources.length}개 정보 출처`} variant="outlined" /></Stack>
+            <Box sx={{ mt: 3, overflowX: "auto" }}>{liveSources.length ? liveSources.map((source, i) => <Stack key={`${source.url}-${i}`} direction={{ xs: "column", sm: "row" }} gap={1} sx={{ py: 2, borderBottom: "1px solid", borderColor: "divider", alignItems: { sm: "center" } }}><Box sx={{ flex: 1 }}><Typography variant="body2" fontWeight={750}>{source.title || "제목 미확인"}</Typography><Typography variant="caption" color="text.secondary">{source.publisher || "발행기관 미확인"}</Typography></Box><Button component="a" href={source.url || undefined} target="_blank" rel="noreferrer" disabled={!source.url} size="small" startIcon={<LinkRoundedIcon />}>원문 확인</Button><Chip label={source.supports ? "근거 연결" : "근거 확인 필요"} size="small" color={source.supports ? "success" : "warning"} variant="outlined" /></Stack>) : <Typography color="text.secondary">저장된 출처 후보가 없습니다.</Typography>}</Box>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6">약품 실제 이미지 후보</Typography>
+            {projectDetail?.assets?.length ? <Box>{projectDetail.assets.map((asset) => <Stack key={asset.id} direction={{ xs: "column", sm: "row" }} gap={1} sx={{ py: 1.5, borderBottom: "1px solid", borderColor: "divider", alignItems: { sm: "center" } }}><Box sx={{ flex: 1 }}><Typography fontWeight={750}>{asset.category} · {asset.local_product_name}</Typography><Button component="a" href={asset.source_url} target="_blank" rel="noreferrer" size="small" sx={{ px: 0 }}>제조사 제품 페이지 확인</Button></Box><Chip label={asset.approval_status === "downloaded" ? "승인·저장됨" : "승인 대기"} size="small" color={asset.approval_status === "downloaded" ? "success" : "warning"} variant="outlined" />{asset.approval_status === "downloaded" ? <Button component="a" href={`/api/assets/${asset.id}/file`} target="_blank" size="small">저장 이미지 보기</Button> : <Button variant="outlined" size="small" onClick={() => setApproveAssetId(asset.id)}>확인 후 승인</Button>}</Stack>)}</Box> : <Paper variant="outlined" sx={{ mt: 2, p: 2, bgcolor: "#fffbeb" }}><Typography fontWeight={800}>승인 가능한 실제 약품 사진 후보 없음</Typography><Typography variant="body2" color="text.secondary">아래에서 제조사 제품 페이지와 실제 패키지 이미지 URL을 함께 등록하세요.</Typography></Paper>}
+            <Box sx={{ mt: 3, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+              <TextField label="분류 (예: 열·두통)" value={assetForm.category} onChange={(e) => setAssetForm({ ...assetForm, category: e.target.value })} />
+              <TextField label="현지 제품명" value={assetForm.localProductName} onChange={(e) => setAssetForm({ ...assetForm, localProductName: e.target.value })} />
+              <TextField label="한국어 제품명" value={assetForm.koreanProductName} onChange={(e) => setAssetForm({ ...assetForm, koreanProductName: e.target.value })} />
+              <TextField label="사용 조건 메모" value={assetForm.usageNote} onChange={(e) => setAssetForm({ ...assetForm, usageNote: e.target.value })} />
+              <TextField label="제조사 공식 제품 페이지 URL" value={assetForm.productPageUrl} onChange={(e) => setAssetForm({ ...assetForm, productPageUrl: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />
+              <TextField label="실제 패키지 이미지 직접 URL" value={assetForm.imageUrl} onChange={(e) => setAssetForm({ ...assetForm, imageUrl: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />
+            </Box>
+            {assetMessage && <Typography variant="body2" color={assetMessage.includes("실패") || assetMessage.includes("필요") ? "error.main" : "success.main"} mt={1.5}>{assetMessage}</Typography>}
+            <Button variant="contained" sx={{ mt: 2 }} onClick={addAssetCandidate} disabled={assetSaving}>약품 이미지 후보 등록</Button>
+          </CardContent></Card>}
 
           {tab === 3 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>QUALITY GATE</Typography><Typography variant="h5">발행 전 검수</Typography></Box><Chip label={`${liveQa?.passed?.length || 0}개 통과`} color="primary" /></Stack><Stack mt={3}>{(liveQa?.blockers || ["실제 조사 데이터 생성 대기"]).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><ErrorRoundedIcon color="warning" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="해결 필요" size="small" color="warning" variant="outlined" /></Stack>)}{(liveQa?.passed || []).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><CheckCircleRoundedIcon color="success" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="통과" size="small" color="success" variant="outlined" /></Stack>)}</Stack><Paper variant="outlined" sx={{ mt: 3, p: 2, borderColor: "warning.main", bgcolor: "#fffbeb" }}><Typography fontWeight={800}>모든 필수 QA 통과 후 승인할 수 있습니다</Typography><Typography variant="body2" color="text.secondary" mt={.5}>현재 version은 검수 초안입니다. PNG 생성과 다운로드는 아직 차단되어 있습니다.</Typography></Paper></CardContent></Card>}
         </Box>
@@ -301,6 +373,16 @@ export default function Home() {
           <Typography variant="body2" color="text.secondary" mb={2}>Vercel에 등록한 관리자 비밀번호를 입력하세요. 비밀번호는 서버에서만 확인됩니다.</Typography>
           <TextField autoFocus fullWidth type="password" label="관리자 비밀번호" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void login(); }} error={Boolean(loginError)} helperText={loginError} />
           <Button fullWidth variant="contained" sx={{ mt: 2 }} onClick={login} disabled={!adminPassword}>로그인</Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(approveAssetId)} onClose={() => setApproveAssetId(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>실제 약품 이미지 승인</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" mb={2}>제조사 제품 페이지와 이미지 속 현지 제품명이 같은지 확인하세요. 승인하면 서버가 이미지를 내려받아 비공개 Supabase Storage에 저장합니다.</Typography>
+          <FormControlLabel control={<Checkbox checked={confirmProductMatch} onChange={(e) => setConfirmProductMatch(e.target.checked)} />} label="이미지 속 제품명과 등록한 현지 제품명이 일치합니다." />
+          <FormControlLabel control={<Checkbox checked={confirmUsageRights} onChange={(e) => setConfirmUsageRights(e.target.checked)} />} label="이미지 사용 조건과 출처 표기 방법을 확인했습니다." />
+          <Button fullWidth variant="contained" sx={{ mt: 2 }} color="warning" disabled={!confirmProductMatch || !confirmUsageRights || assetSaving} onClick={approveAndDownloadAsset}>{assetSaving ? "확인·저장 중…" : "승인하고 이미지 저장"}</Button>
         </DialogContent>
       </Dialog>
 
