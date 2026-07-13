@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     const queue = await supabaseRequest<CardProject[]>(
-      "card_projects?select=*&status=in.(queued,failed,needs_asset)&order=order_index.asc&limit=1",
+      "card_projects?select=*&status=in.(queued,failed)&order=order_index.asc&limit=1",
     );
     project = queue[0];
     if (!project) return NextResponse.json({ skipped: true, reason: "No queued project" });

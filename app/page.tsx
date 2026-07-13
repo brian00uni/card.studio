@@ -79,6 +79,15 @@ type Project = {
   current_version: number;
 };
 
+type ProjectDetail = {
+  version: null | {
+    version: number;
+    sources: Array<{ title?: string; url?: string; publisher?: string; grade?: string; supports?: string }>;
+    qa_report: { passed?: string[]; blockers?: string[]; warnings?: string[]; humanReviewRequired?: string[] };
+  };
+  assets: Array<{ id: string; category: string; local_product_name?: string; source_url: string; approval_status: string }>;
+};
+
 const statusLabel: Record<string, string> = {
   queued: "대기",
   researching: "조사 중",
@@ -116,10 +125,11 @@ export default function Home() {
   const [tab, setTab] = useState(0);
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [saved, setSaved] = useState(false);
-  const [approved, setApproved] = useState(false);
+  const [, setApproved] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [backendNotice, setBackendNotice] = useState<string | null>(null);
+  const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("card-studio-prompt");
@@ -138,6 +148,19 @@ export default function Home() {
   const projectQueue = projects.length
     ? projects.slice(0, 5).map((project) => [project.city, project.country, statusLabel[project.status] || project.status] as const)
     : fallbackQueue;
+  const liveSources = projectDetail?.version?.sources || [];
+  const liveQa = projectDetail?.version?.qa_report;
+
+  useEffect(() => {
+    if (!activeProject?.slug) return;
+    fetch(`/api/projects/${activeProject.slug}`)
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "상세 데이터를 불러오지 못했습니다.");
+        setProjectDetail(payload);
+      })
+      .catch(() => setBackendNotice("프로젝트 상세 데이터를 불러오지 못했습니다."));
+  }, [activeProject?.slug]);
   const savePrompt = () => {
     window.localStorage.setItem("card-studio-prompt", prompt);
     setSaved(true);
@@ -180,7 +203,7 @@ export default function Home() {
         <Box sx={{ px: { xs: 2, md: 4 }, py: 3 }}>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
             <Box><Typography variant="body2" color="text.secondary" mb={.5}>카드 프로젝트  /  {activeProject?.country || "일본"}</Typography><Typography variant="h4">{activeProject?.city || "오사카"} 위급정보 카드</Typography>{backendNotice && <Typography variant="caption" color="warning.main">{backendNotice}</Typography>}</Box>
-            <Stack direction="row" spacing={1}><Chip icon={<ScheduleRoundedIcon />} label={activeProject?.run_date ? new Date(activeProject.run_date).toLocaleString("ko-KR") : "자동 생성 대기"} variant="outlined" /><Chip label={activeProject ? (statusLabel[activeProject.status] || activeProject.status) : "디자인 샘플"} color="warning" variant="outlined" /></Stack>
+            <Stack direction="row" spacing={1}><Chip icon={<ScheduleRoundedIcon />} label={activeProject?.run_date ? new Date(activeProject.run_date).toLocaleString("ko-KR") : "자동 생성 대기"} variant="outlined" />{projectDetail?.version && <Chip label={`version ${projectDetail.version.version}`} variant="outlined" />}<Chip label={activeProject ? (statusLabel[activeProject.status] || activeProject.status) : "디자인 샘플"} color="warning" variant="outlined" /></Stack>
           </Stack>
 
           <Card sx={{ mt: 3 }}>
@@ -206,9 +229,9 @@ export default function Home() {
 
           {tab === 1 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction={{ xs: "column", sm: "row" }} gap={2} sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>AUTOMATION PROMPT</Typography><Typography variant="h5">매일 아침 제작 지시문</Typography><Typography variant="body2" color="text.secondary" mt={1}>현재 브라우저에 임시 저장되며 Supabase 연결 후 팀 공용 버전으로 전환됩니다.</Typography></Box><Button variant="contained" onClick={savePrompt}>{saved ? "저장됨" : "프롬프트 저장"}</Button></Stack><TextField value={prompt} onChange={e => setPrompt(e.target.value)} multiline minRows={15} fullWidth sx={{ mt: 3, "& textarea": { fontFamily: "ui-monospace, monospace", lineHeight: 1.7 } }} /><Stack direction="row" mt={1} sx={{ justifyContent: "space-between" }}><Typography variant="caption" color="text.secondary">매일 오전 6시 실행 · 오전 7시 검수 준비</Typography><Typography variant="caption" color="text.secondary">{prompt.length}자</Typography></Stack></CardContent></Card>}
 
-          {tab === 2 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>SOURCE REGISTRY</Typography><Typography variant="h5">정보·이미지 출처</Typography></Box><Button variant="outlined">출처 추가</Button></Stack><Box sx={{ mt: 3, overflowX: "auto" }}>{[["한국어 긴급전화", "공식 공관 · A", "확인 필요"], ["병원 운영정보", "병원 공식 · A", "확인 필요"], ["약품 패키지", "제조사 공식 · A", "자산 필요"], ["현지어 문장", "사람 검수", "감수 필요"]].map((r, i) => <Stack key={r[0]} direction="row" sx={{ py: 2, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{r[0]}</Typography><Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>{r[1]}</Typography><Chip label={r[2]} size="small" color={i < 2 ? "warning" : "default"} variant="outlined" /></Stack>)}</Box></CardContent></Card>}
+          {tab === 2 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>SOURCE REGISTRY</Typography><Typography variant="h5">정보·이미지 출처</Typography></Box><Chip label={`${liveSources.length}개 후보`} variant="outlined" /></Stack><Box sx={{ mt: 3, overflowX: "auto" }}>{liveSources.length ? liveSources.map((source, i) => <Stack key={`${source.url}-${i}`} direction={{ xs: "column", sm: "row" }} gap={1} sx={{ py: 2, borderBottom: "1px solid", borderColor: "divider", alignItems: { sm: "center" } }}><Box sx={{ flex: 1 }}><Typography variant="body2" fontWeight={750}>{source.title || "제목 미확인"}</Typography><Typography variant="caption" color="text.secondary">{source.publisher || "발행기관 미확인"}</Typography></Box><Button component="a" href={source.url || undefined} target="_blank" rel="noreferrer" disabled={!source.url} size="small" startIcon={<LinkRoundedIcon />}>원문 확인</Button><Chip label={source.supports ? "근거 연결" : "근거 확인 필요"} size="small" color={source.supports ? "success" : "warning"} variant="outlined" /></Stack>) : <Typography color="text.secondary">저장된 출처 후보가 없습니다.</Typography>}</Box>{projectDetail?.assets?.length ? <Box mt={3}><Typography variant="h6">약품 이미지 후보</Typography>{projectDetail.assets.map((asset) => <Stack key={asset.id} direction="row" sx={{ py: 1.5, borderBottom: "1px solid", borderColor: "divider" }}><Typography sx={{ flex: 1 }}>{asset.category} · {asset.local_product_name}</Typography><Chip label={asset.approval_status} size="small" /></Stack>)}</Box> : <Paper variant="outlined" sx={{ mt: 3, p: 2, bgcolor: "#fffbeb" }}><Typography fontWeight={800}>승인 가능한 실제 약품 사진 후보 없음</Typography><Typography variant="body2" color="text.secondary">제조사 공식 URL과 실제 패키지 사진 확인 후에만 다운로드할 수 있습니다.</Typography></Paper>}</CardContent></Card>}
 
-          {tab === 3 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>QUALITY GATE</Typography><Typography variant="h5">발행 전 검수</Typography></Box><Chip label={`${passed} / ${checks.length} 통과`} color="primary" /></Stack><Stack mt={3}>{checks.map(([label, ok]) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}>{ok ? <CheckCircleRoundedIcon color="success" /> : <ErrorRoundedIcon color="warning" />}<Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label={ok ? "통과" : "확인 필요"} size="small" color={ok ? "success" : "warning"} variant="outlined" /></Stack>)}</Stack><Paper variant="outlined" sx={{ mt: 3, p: 2, borderColor: approved ? "success.main" : "warning.main", bgcolor: approved ? "#ecfdf5" : "#fffbeb" }}><Typography fontWeight={800}>{approved ? "PNG 생성이 승인되었습니다" : "모든 필수 QA 통과 후 승인하세요"}</Typography><Typography variant="body2" color="text.secondary" mt={.5}>{approved ? "실제 렌더러 연결 후 1080×1920 PNG 7장이 생성됩니다." : "현재 샘플 데이터이므로 실제 발행 파일은 생성하지 않습니다."}</Typography></Paper></CardContent></Card>}
+          {tab === 3 && <Card sx={{ mt: 3 }}><CardContent sx={{ p: 3 }}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Box><Typography variant="overline" color="primary.main" fontWeight={850}>QUALITY GATE</Typography><Typography variant="h5">발행 전 검수</Typography></Box><Chip label={`${liveQa?.passed?.length || 0}개 통과`} color="primary" /></Stack><Stack mt={3}>{(liveQa?.blockers || ["실제 조사 데이터 생성 대기"]).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><ErrorRoundedIcon color="warning" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="해결 필요" size="small" color="warning" variant="outlined" /></Stack>)}{(liveQa?.passed || []).map((label) => <Stack key={label} direction="row" spacing={1.5} sx={{ py: 1.7, borderBottom: "1px solid", borderColor: "divider", alignItems: "center" }}><CheckCircleRoundedIcon color="success" /><Typography variant="body2" fontWeight={750} sx={{ flex: 1 }}>{label}</Typography><Chip label="통과" size="small" color="success" variant="outlined" /></Stack>)}</Stack><Paper variant="outlined" sx={{ mt: 3, p: 2, borderColor: "warning.main", bgcolor: "#fffbeb" }}><Typography fontWeight={800}>모든 필수 QA 통과 후 승인할 수 있습니다</Typography><Typography variant="body2" color="text.secondary" mt={.5}>현재 version은 검수 초안입니다. PNG 생성과 다운로드는 아직 차단되어 있습니다.</Typography></Paper></CardContent></Card>}
         </Box>
       </Box>
 
