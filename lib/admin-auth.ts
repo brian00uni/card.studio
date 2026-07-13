@@ -16,13 +16,28 @@ function safeEqual(left: string, right: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+function normalizePassword(value: string) {
+  let normalized = value.normalize("NFKC").trim();
+  const first = normalized.at(0);
+  const last = normalized.at(-1);
+  if (normalized.length >= 2 && first === last && (first === '"' || first === "'")) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+  return normalized;
+}
+
 function signature(payload: string) {
   return createHmac("sha256", signingSecret()).update(payload).digest("base64url");
 }
 
 export function validAdminPassword(password: unknown) {
   const configured = process.env.CARD_STUDIO_ADMIN_PASSWORD;
-  return typeof password === "string" && Boolean(configured) && safeEqual(password, configured!);
+  return typeof password === "string" && typeof configured === "string" && configured.length > 0
+    && safeEqual(normalizePassword(password), normalizePassword(configured));
+}
+
+export function adminPasswordConfigured() {
+  return Boolean(process.env.CARD_STUDIO_ADMIN_PASSWORD?.trim());
 }
 
 export function createAdminSession() {
