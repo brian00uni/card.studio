@@ -48,9 +48,10 @@ medicines.items의 image는 모두 빈 문자열로 두며 실제 사진 승인 
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "groq/compound",
+      model: "groq/compound-mini",
       temperature: 0.1,
-      max_completion_tokens: 7000,
+      max_completion_tokens: 4500,
+      response_format: { type: "json_object" },
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
     }),
   });
