@@ -48,9 +48,21 @@ function extractJson(content: string): GroqDraft {
     return /^https:\/\//.test(url) && supports.trim().length > 0;
   });
   if (traceableSources.length < 3) {
-    throw new Error("Research draft rejected: fewer than 3 traceable official sources.");
+    const qa = draft.qaReport as { blockers?: string[] };
+    qa.blockers = Array.from(new Set([
+      ...(qa.blockers || []),
+      "공식 URL과 근거가 연결된 출처 3개 미만",
+    ]));
   }
   return draft;
+}
+
+export function countTraceableSources(draft: GroqDraft) {
+  return draft.sources.filter((source) => {
+    const url = typeof source.url === "string" ? source.url : "";
+    const supports = typeof source.supports === "string" ? source.supports : "";
+    return /^https:\/\//.test(url) && supports.trim().length > 0;
+  }).length;
 }
 
 export async function generateResearchDraft(project: { country: string; city: string; topic: string }) {

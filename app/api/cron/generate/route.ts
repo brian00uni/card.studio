@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateResearchDraft } from "@/lib/groq";
+import { countTraceableSources, generateResearchDraft } from "@/lib/groq";
 import { CardProject, supabaseRequest } from "@/lib/supabase-rest";
 
 export const maxDuration = 300;
@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     runId = runs[0]?.id;
 
     const draft = await generateResearchDraft(project);
+    const traceableSourceCount = countTraceableSources(draft);
     const version = project.current_version + 1;
     if (project.current_version > 0) {
       await supabaseRequest(`card_versions?project_id=eq.${project.id}&status=neq.approved`, {
@@ -71,11 +72,14 @@ export async function GET(request: NextRequest) {
     });
     const versionId = versions[0]?.id;
 
-    if (draft.medicineCandidates?.length) {
+    const medicineCandidates = (draft.medicineCandidates || []).filter((asset) =>
+      /^https:\/\//.test(asset.sourceUrl || ""),
+    );
+    if (medicineCandidates.length) {
       await supabaseRequest("card_assets", {
         method: "POST",
         prefer: "return=minimal",
-        body: JSON.stringify(draft.medicineCandidates.map((asset) => ({
+        body: JSON.stringify(medicineCandidates.map((asset) => ({
           project_id: project!.id,
           version_id: versionId,
           category: asset.category,
@@ -89,13 +93,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await patchProject(project.id, { status: "needs_asset", current_version: version });
+    const nextStatus = traceableSourceCount >= 3 ? "needs_asset" : "needs_review";
+    await patchProject(project.id, { status: nextStatus, current_version: version });
     if (runId) await supabaseRequest(`card_generation_runs?id=eq.${runId}`, {
       method: "PATCH",
       prefer: "return=minimal",
       body: JSON.stringify({ status: "completed", finished_at: new Date().toISOString(), metadata: { version, versionId } }),
     });
-    return NextResponse.json({ ok: true, project: project.slug, version, status: "needs_asset" });
+    return NextResponse.json({ ok: true, project: project.slug, version, status: nextStatus, traceableSourceCount });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";
     if (project) await patchProject(project.id, { status: "failed" }).catch(() => undefined);
